@@ -19,6 +19,7 @@ dist/
 /cortex
 /query-tee
 /test-exporter
+/data
 
 # This is custom Makefile modification, if it exists.
 Makefile.local
