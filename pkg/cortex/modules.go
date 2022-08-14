@@ -1,7 +1,6 @@
 package cortex
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"net/http"
@@ -11,14 +10,11 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/prometheus/rules"
 	prom_storage "github.com/prometheus/prometheus/storage"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	httpgrpc_server "github.com/weaveworks/common/httpgrpc/server"
 	"github.com/weaveworks/common/server"
 
-	"github.com/cortexproject/cortex/pkg/alertmanager"
-	"github.com/cortexproject/cortex/pkg/alertmanager/alertstore"
 	"github.com/cortexproject/cortex/pkg/api"
 	"github.com/cortexproject/cortex/pkg/chunk/purger"
 	"github.com/cortexproject/cortex/pkg/compactor"
@@ -36,7 +32,6 @@ import (
 	"github.com/cortexproject/cortex/pkg/ring"
 	"github.com/cortexproject/cortex/pkg/ring/kv/codec"
 	"github.com/cortexproject/cortex/pkg/ring/kv/memberlist"
-	"github.com/cortexproject/cortex/pkg/ruler"
 	"github.com/cortexproject/cortex/pkg/scheduler"
 	"github.com/cortexproject/cortex/pkg/storegateway"
 	util_log "github.com/cortexproject/cortex/pkg/util/log"
@@ -65,10 +60,7 @@ const (
 	QueryFrontend            string = "query-frontend"
 	QueryFrontendTripperware string = "query-frontend-tripperware"
 	DeleteRequestsStore      string = "delete-requests-store"
-	RulerStorage             string = "ruler-storage"
-	Ruler                    string = "ruler"
 	Configs                  string = "configs"
-	AlertManager             string = "alertmanager"
 	Compactor                string = "compactor"
 	StoreGateway             string = "store-gateway"
 	MemberlistKV             string = "memberlist-kv"
@@ -479,60 +471,6 @@ func (t *Cortex) initQueryFrontend() (serv services.Service, err error) {
 	return nil, nil
 }
 
-func (t *Cortex) initRulerStorage() (serv services.Service, err error) {
-	// if the ruler is not configured and we're in single binary then let's just log an error and continue.
-	// unfortunately there is no way to generate a "default" config and compare default against actual
-	// to determine if it's unconfigured.  the following check, however, correctly tests this.
-	// Single binary integration tests will break if this ever drifts
-	if t.Cfg.isModuleEnabled(All) && t.Cfg.RulerStorage.IsDefaults() {
-		level.Info(util_log.Logger).Log("msg", "Ruler storage is not configured in single binary mode and will not be started.")
-		return
-	}
-
-	t.RulerStorage, err = ruler.NewRuleStore(context.Background(), t.Cfg.RulerStorage, t.Overrides, rules.FileLoader{}, util_log.Logger, prometheus.DefaultRegisterer)
-	return
-}
-
-func (t *Cortex) initRuler() (serv services.Service, err error) {
-	if t.RulerStorage == nil {
-		level.Info(util_log.Logger).Log("msg", "RulerStorage is nil.  Not starting the ruler.")
-		return nil, nil
-	}
-
-	t.Cfg.Ruler.Ring.ListenPort = t.Cfg.Server.GRPCListenPort
-	rulerRegisterer := prometheus.WrapRegistererWith(prometheus.Labels{"engine": "ruler"}, prometheus.DefaultRegisterer)
-	// TODO: Consider wrapping logger to differentiate from querier module logger
-	queryable, _, engine := querier.New(t.Cfg.Querier, t.Overrides, t.Distributor, t.StoreQueryables, t.TombstonesLoader, rulerRegisterer, util_log.Logger)
-
-	managerFactory := ruler.DefaultTenantManagerFactory(t.Cfg.Ruler, t.Distributor, queryable, engine, t.Overrides, prometheus.DefaultRegisterer)
-	manager, err := ruler.NewDefaultMultiTenantManager(t.Cfg.Ruler, managerFactory, prometheus.DefaultRegisterer, util_log.Logger)
-	if err != nil {
-		return nil, err
-	}
-
-	t.Ruler, err = ruler.NewRuler(
-		t.Cfg.Ruler,
-		manager,
-		prometheus.DefaultRegisterer,
-		util_log.Logger,
-		t.RulerStorage,
-		t.Overrides,
-	)
-	if err != nil {
-		return
-	}
-
-	// Expose HTTP/GRPC endpoints for the Ruler service
-	t.API.RegisterRuler(t.Ruler)
-
-	// If the API is enabled, register the Ruler API
-	if t.Cfg.Ruler.EnableAPI {
-		t.API.RegisterRulerAPI(ruler.NewAPI(t.Ruler, t.RulerStorage, util_log.Logger))
-	}
-
-	return t.Ruler, nil
-}
-
 func (t *Cortex) initConfig() (serv services.Service, err error) {
 	t.ConfigDB, err = db.New(t.Cfg.Configs.DB)
 	if err != nil {
@@ -545,24 +483,6 @@ func (t *Cortex) initConfig() (serv services.Service, err error) {
 		t.ConfigDB.Close()
 		return nil
 	}), nil
-}
-
-func (t *Cortex) initAlertManager() (serv services.Service, err error) {
-	t.Cfg.Alertmanager.ShardingRing.ListenPort = t.Cfg.Server.GRPCListenPort
-
-	// Initialise the store.
-	store, err := alertstore.NewAlertStore(context.Background(), t.Cfg.AlertmanagerStorage, t.Overrides, util_log.Logger, prometheus.DefaultRegisterer)
-	if err != nil {
-		return
-	}
-
-	t.Alertmanager, err = alertmanager.NewMultitenantAlertmanager(&t.Cfg.Alertmanager, store, t.Overrides, util_log.Logger, prometheus.DefaultRegisterer)
-	if err != nil {
-		return
-	}
-
-	t.API.RegisterAlertmanager(t.Alertmanager, t.Cfg.isModuleEnabled(AlertManager), t.Cfg.Alertmanager.EnableAPI)
-	return t.Alertmanager, nil
 }
 
 func (t *Cortex) initCompactor() (serv services.Service, err error) {
@@ -614,8 +534,6 @@ func (t *Cortex) initMemberlistKV() (services.Service, error) {
 	t.Cfg.Ingester.LifecyclerConfig.RingConfig.KVStore.MemberlistKV = t.MemberlistKV.GetMemberlistKV
 	t.Cfg.StoreGateway.ShardingRing.KVStore.MemberlistKV = t.MemberlistKV.GetMemberlistKV
 	t.Cfg.Compactor.ShardingRing.KVStore.MemberlistKV = t.MemberlistKV.GetMemberlistKV
-	t.Cfg.Ruler.Ring.KVStore.MemberlistKV = t.MemberlistKV.GetMemberlistKV
-	t.Cfg.Alertmanager.ShardingRing.KVStore.MemberlistKV = t.MemberlistKV.GetMemberlistKV
 
 	return t.MemberlistKV, nil
 }
@@ -664,10 +582,7 @@ func (t *Cortex) setupModuleManager() error {
 	mm.RegisterModule(StoreQueryable, t.initStoreQueryables, modules.UserInvisibleModule)
 	mm.RegisterModule(QueryFrontendTripperware, t.initQueryFrontendTripperware, modules.UserInvisibleModule)
 	mm.RegisterModule(QueryFrontend, t.initQueryFrontend)
-	mm.RegisterModule(RulerStorage, t.initRulerStorage, modules.UserInvisibleModule)
-	mm.RegisterModule(Ruler, t.initRuler)
 	mm.RegisterModule(Configs, t.initConfig)
-	mm.RegisterModule(AlertManager, t.initAlertManager)
 	mm.RegisterModule(Compactor, t.initCompactor)
 	mm.RegisterModule(StoreGateway, t.initStoreGateway)
 	mm.RegisterModule(TenantDeletion, t.initTenantDeletionAPI, modules.UserInvisibleModule)
@@ -695,16 +610,13 @@ func (t *Cortex) setupModuleManager() error {
 		QueryFrontendTripperware: {API, Overrides, DeleteRequestsStore},
 		QueryFrontend:            {QueryFrontendTripperware},
 		QueryScheduler:           {API, Overrides},
-		Ruler:                    {DistributorService, Overrides, DeleteRequestsStore, StoreQueryable, RulerStorage},
-		RulerStorage:             {Overrides},
 		Configs:                  {API},
-		AlertManager:             {API, MemberlistKV, Overrides},
 		Compactor:                {API, MemberlistKV, Overrides},
 		StoreGateway:             {API, Overrides, MemberlistKV},
 		TenantDeletion:           {API, Overrides, DeleteRequestsStore},
 		Purger:                   {TenantDeletion},
 		TenantFederation:         {Queryable},
-		All:                      {QueryFrontend, Querier, Ingester, Distributor, Purger, StoreGateway, Ruler},
+		All:                      {QueryFrontend, Querier, Ingester, Distributor, Purger, StoreGateway},
 	}
 	for mod, targets := range deps {
 		if err := mm.AddDependency(mod, targets...); err != nil {

@@ -6,8 +6,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"html/template"
-	"io/ioutil"
 	"mime"
 	"net/http"
 	"strconv"
@@ -17,13 +15,10 @@ import (
 
 	"github.com/go-kit/log/level"
 	"github.com/gorilla/mux"
-	amconfig "github.com/prometheus/alertmanager/config"
-	amtemplate "github.com/prometheus/alertmanager/template"
 
 	"github.com/cortexproject/cortex/pkg/configs/db"
 	"github.com/cortexproject/cortex/pkg/configs/userconfig"
 	"github.com/cortexproject/cortex/pkg/tenant"
-	"github.com/cortexproject/cortex/pkg/util"
 	util_log "github.com/cortexproject/cortex/pkg/util/log"
 )
 
@@ -96,7 +91,6 @@ func (a *API) RegisterRoutes(r *mux.Router) {
 		{"set_templates", "POST", "/api/prom/configs/templates", a.setConfig},
 		{"get_alertmanager_config", "GET", "/api/prom/configs/alertmanager", a.getConfig},
 		{"set_alertmanager_config", "POST", "/api/prom/configs/alertmanager", a.setConfig},
-		{"validate_alertmanager_config", "POST", "/api/prom/configs/alertmanager/validate", a.validateAlertmanagerConfig},
 		{"deactivate_config", "DELETE", "/api/prom/configs/deactivate", a.deactivateConfig},
 		{"restore_config", "POST", "/api/prom/configs/restore", a.restoreConfig},
 		// Internal APIs.
@@ -177,19 +171,9 @@ func (a *API) setConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := validateAlertmanagerConfig(cfg.AlertmanagerConfig, a.cfg.Notifications); err != nil && cfg.AlertmanagerConfig != "" {
-		level.Error(logger).Log("msg", "invalid Alertmanager config", "err", err)
-		http.Error(w, fmt.Sprintf("Invalid Alertmanager config: %v", err), http.StatusBadRequest)
-		return
-	}
 	if err := validateRulesFiles(cfg); err != nil {
 		level.Error(logger).Log("msg", "invalid rules", "err", err)
 		http.Error(w, fmt.Sprintf("Invalid rules: %v", err), http.StatusBadRequest)
-		return
-	}
-	if err := validateTemplateFiles(cfg); err != nil {
-		level.Error(logger).Log("msg", "invalid templates", "err", err)
-		http.Error(w, fmt.Sprintf("Invalid templates: %v", err), http.StatusBadRequest)
 		return
 	}
 	if err := a.db.SetConfig(r.Context(), userID, cfg); err != nil {
@@ -201,60 +185,9 @@ func (a *API) setConfig(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (a *API) validateAlertmanagerConfig(w http.ResponseWriter, r *http.Request) {
-	logger := util_log.WithContext(r.Context(), util_log.Logger)
-	cfg, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		level.Error(logger).Log("msg", "error reading request body", "err", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if err = validateAlertmanagerConfig(string(cfg), a.cfg.Notifications); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		util.WriteJSONResponse(w, map[string]string{
-			"status": "error",
-			"error":  err.Error(),
-		})
-		return
-	}
-
-	util.WriteJSONResponse(w, map[string]string{
-		"status": "success",
-	})
-}
-
-func validateAlertmanagerConfig(cfg string, noCfg NotificationsConfig) error {
-	amCfg, err := amconfig.Load(cfg)
-	if err != nil {
-		return err
-	}
-
-	for _, recv := range amCfg.Receivers {
-		if noCfg.DisableEmail && len(recv.EmailConfigs) > 0 {
-			return ErrEmailNotificationsAreDisabled
-		}
-		if noCfg.DisableWebHook && len(recv.WebhookConfigs) > 0 {
-			return ErrWebhookNotificationsAreDisabled
-		}
-	}
-
-	return nil
-}
-
 func validateRulesFiles(c userconfig.Config) error {
 	_, err := c.RulesConfig.Parse()
 	return err
-}
-
-func validateTemplateFiles(c userconfig.Config) error {
-	for fn, content := range c.TemplateFiles {
-		if _, err := template.New(fn).Funcs(template.FuncMap(amtemplate.DefaultFuncs)).Parse(content); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 // ConfigsView renders multiple configurations, mapping userID to userconfig.View.

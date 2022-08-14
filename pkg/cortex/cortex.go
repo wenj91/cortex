@@ -21,8 +21,6 @@ import (
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"gopkg.in/yaml.v2"
 
-	"github.com/cortexproject/cortex/pkg/alertmanager"
-	"github.com/cortexproject/cortex/pkg/alertmanager/alertstore"
 	"github.com/cortexproject/cortex/pkg/api"
 	"github.com/cortexproject/cortex/pkg/chunk/purger"
 	"github.com/cortexproject/cortex/pkg/compactor"
@@ -43,8 +41,6 @@ import (
 	querier_worker "github.com/cortexproject/cortex/pkg/querier/worker"
 	"github.com/cortexproject/cortex/pkg/ring"
 	"github.com/cortexproject/cortex/pkg/ring/kv/memberlist"
-	"github.com/cortexproject/cortex/pkg/ruler"
-	"github.com/cortexproject/cortex/pkg/ruler/rulestore"
 	"github.com/cortexproject/cortex/pkg/scheduler"
 	"github.com/cortexproject/cortex/pkg/storage/tsdb"
 	"github.com/cortexproject/cortex/pkg/storegateway"
@@ -107,14 +103,10 @@ type Config struct {
 	StoreGateway     storegateway.Config             `yaml:"store_gateway"`
 	TenantFederation tenantfederation.Config         `yaml:"tenant_federation"`
 
-	Ruler               ruler.Config                               `yaml:"ruler"`
-	RulerStorage        rulestore.Config                           `yaml:"ruler_storage"`
-	Configs             configs.Config                             `yaml:"configs"`
-	Alertmanager        alertmanager.MultitenantAlertmanagerConfig `yaml:"alertmanager"`
-	AlertmanagerStorage alertstore.Config                          `yaml:"alertmanager_storage"`
-	RuntimeConfig       runtimeconfig.Config                       `yaml:"runtime_config"`
-	MemberlistKV        memberlist.KVConfig                        `yaml:"memberlist"`
-	QueryScheduler      scheduler.Config                           `yaml:"query_scheduler"`
+	Configs        configs.Config       `yaml:"configs"`
+	RuntimeConfig  runtimeconfig.Config `yaml:"runtime_config"`
+	MemberlistKV   memberlist.KVConfig  `yaml:"memberlist"`
+	QueryScheduler scheduler.Config     `yaml:"query_scheduler"`
 }
 
 // RegisterFlags registers flag.
@@ -151,11 +143,7 @@ func (c *Config) RegisterFlags(f *flag.FlagSet) {
 	c.StoreGateway.RegisterFlags(f)
 	c.TenantFederation.RegisterFlags(f)
 
-	c.Ruler.RegisterFlags(f)
-	c.RulerStorage.RegisterFlags(f)
 	c.Configs.RegisterFlags(f)
-	c.Alertmanager.RegisterFlags(f)
-	c.AlertmanagerStorage.RegisterFlags(f)
 	c.RuntimeConfig.RegisterFlags(f)
 	c.MemberlistKV.RegisterFlags(f)
 	c.QueryScheduler.RegisterFlags(f)
@@ -174,12 +162,6 @@ func (c *Config) Validate(log log.Logger) error {
 
 	if err := c.Storage.Validate(); err != nil {
 		return errors.Wrap(err, "invalid storage config")
-	}
-	if err := c.RulerStorage.Validate(); err != nil {
-		return errors.Wrap(err, "invalid rulestore config")
-	}
-	if err := c.Ruler.Validate(c.LimitsConfig, log); err != nil {
-		return errors.Wrap(err, "invalid ruler config")
 	}
 	if err := c.BlocksStorage.Validate(); err != nil {
 		return errors.Wrap(err, "invalid TSDB config")
@@ -207,12 +189,6 @@ func (c *Config) Validate(log log.Logger) error {
 	}
 	if err := c.Compactor.Validate(c.LimitsConfig); err != nil {
 		return errors.Wrap(err, "invalid compactor config")
-	}
-	if err := c.AlertmanagerStorage.Validate(); err != nil {
-		return errors.Wrap(err, "invalid alertmanager storage config")
-	}
-	if err := c.Alertmanager.Validate(c.AlertmanagerStorage); err != nil {
-		return errors.Wrap(err, "invalid alertmanager config")
 	}
 
 	return nil
@@ -294,11 +270,8 @@ type Cortex struct {
 	QuerierEngine            *promql.Engine
 	QueryFrontendTripperware queryrange.Tripperware
 
-	Ruler        *ruler.Ruler
-	RulerStorage rulestore.RuleStore
 	ConfigAPI    *configAPI.API
 	ConfigDB     db.DB
-	Alertmanager *alertmanager.MultitenantAlertmanager
 	Compactor    *compactor.Compactor
 	StoreGateway *storegateway.StoreGateway
 	MemberlistKV *memberlist.KVInitService

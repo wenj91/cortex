@@ -50,20 +50,21 @@ storage:
 
 blocks_storage:
   tsdb:
-    dir: /tmp/cortex/tsdb
+    dir: data/cortex/tsdb
 
   bucket_store:
-    sync_dir: /tmp/cortex/tsdb-sync
+    sync_dir: data/cortex/tsdb-sync
 
   # You can choose between local storage and Amazon S3, Google GCS and Azure storage. Each option requires additional configuration
   # as shown below. All options can be configured via flags as well which might be handy for secret inputs.
   backend: s3 # s3, gcs, azure or filesystem are valid options
   s3:
     bucket_name: cortex
-    endpoint: s3.dualstack.us-east-1.amazonaws.com
+    endpoint: localhost:9000
     # Configure your S3 credentials below.
-    # secret_access_key: "TODO"
-    # access_key_id:     "TODO"
+    secret_access_key: 12345678
+    access_key_id: cortex
+    insecure: true
 #  gcs:
 #    bucket_name: cortex
 #    service_account: # if empty or omitted Cortex will use your default service account as per Google's fallback logic
@@ -77,7 +78,7 @@ blocks_storage:
 #   dir: ./data/tsdb
 
 compactor:
-  data_dir: /tmp/cortex/compactor
+  data_dir: data/cortex/compactor
   sharding_ring:
     kvstore:
       store: inmemory
@@ -85,11 +86,11 @@ compactor:
 frontend_worker:
   match_max_concurrent: true
 
-ruler:
-  enable_api: true
-  enable_sharding: false
+# ruler:
+#   enable_api: true
+#   enable_sharding: false
 
-ruler_storage:
-  backend: local
-  local:
-    directory: /tmp/cortex/rules
+# ruler_storage:
+#   backend: local
+#   local:
+#     directory: /tmp/cortex/rules

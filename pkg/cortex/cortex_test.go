@@ -6,15 +6,12 @@ import (
 	"flag"
 	"io"
 	"net"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cortexproject/cortex/pkg/cortex/storage"
-	"github.com/cortexproject/cortex/pkg/ruler/rulestore"
-	"github.com/cortexproject/cortex/pkg/ruler/rulestore/local"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
@@ -80,14 +77,6 @@ func TestCortex(t *testing.T) {
 				IndexCache: tsdb.IndexCacheConfig{
 					Backend: tsdb.IndexCacheBackendInMemory,
 				},
-			},
-		},
-		RulerStorage: rulestore.Config{
-			Config: bucket.Config{
-				Backend: "local",
-			},
-			Local: local.Config{
-				Directory: os.TempDir(),
 			},
 		},
 

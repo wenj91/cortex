@@ -15,8 +15,6 @@ require (
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
 	github.com/felixge/fgprof v0.9.2
 	github.com/go-kit/log v0.2.1
-	github.com/go-openapi/strfmt v0.21.2
-	github.com/go-openapi/swag v0.21.1
 	github.com/go-redis/redis/v8 v8.11.4
 	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.0
@@ -46,7 +44,6 @@ require (
 	github.com/prometheus/prometheus v1.8.2-0.20220616150932-0d0e44d7e65f
 	github.com/segmentio/fasthash v0.0.0-20180216231524-a72b379d632e
 	github.com/sony/gobreaker v0.4.1
-	github.com/spf13/afero v1.6.0
 	github.com/stretchr/testify v1.7.2
 	github.com/thanos-io/thanos v0.27.0-rc.0.0.20220715025542-84880ea6d7f8
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
@@ -55,7 +52,6 @@ require (
 	go.etcd.io/etcd/client/pkg/v3 v3.5.4
 	go.etcd.io/etcd/client/v3 v3.5.4
 	go.uber.org/atomic v1.9.0
-	golang.org/x/net v0.0.0-20220607020251-c690dde0001d
 	golang.org/x/sync v0.0.0-20220601150217-0de741cfad7f
 	golang.org/x/time v0.0.0-20220224211638-0e9765cccd65
 	google.golang.org/grpc v1.47.0

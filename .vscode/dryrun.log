@@ -1,0 +1,55 @@
+make --dry-run --always-make --keep-going --print-directory
+make: Entering directory `/Users/wenj91/git/prometheus'
+echo ">> checking code style"
+fmtRes=$(gofmt -d $(find . -path ./vendor -prune -o -name '*.go' -print)); \
+	if [ -n "${fmtRes}" ]; then \
+		echo "gofmt checking failed!"; echo "${fmtRes}"; echo; \
+		echo "Please ensure you are using $(go version) for formatting code."; \
+		exit 1; \
+	fi
+echo ">> checking license header"
+licRes=$(for file in $(find . -type f -iname '*.go' ! -path './vendor/*') ; do awk 'NR<=3' $file | grep -Eq "(Copyright|generated|GENERATED)" || echo $file; done); \
+       if [ -n "${licRes}" ]; then \
+               echo "license header checking failed:"; echo "${licRes}"; \
+               exit 1; \
+       fi
+mkdir -p /Users/wenj91/go/bin
+curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/v1.39.0/install.sh \
+		| sed -e '/install -d/d' \
+		| sh -s -- -b /Users/wenj91/go/bin v1.39.0
+echo ">> running golangci-lint"
+GO111MODULE=on go list -e -compiled -test=true -export=false -deps=true -find=false -tags= -- ./... > /dev/null
+GO111MODULE=on /Users/wenj91/go/bin/golangci-lint run --timeout 4m ./...
+echo ">> running yamllint on all YAML files in the repository"
+echo "yamllint not installed so skipping"
+echo ">> running check for unused/missing packages in go.mod"
+GO111MODULE=on go mod tidy
+git diff --exit-code -- go.sum go.mod
+cd web/ui/react-app && yarn --frozen-lockfile
+ 
+echo ">> building React app"
+./scripts/build_react_app.sh
+echo ">> writing assets"
+# Un-setting GOOS and GOARCH here because the generated Go code is always the same,
+ 
+# but the cached object code is incompatible between architectures and OSes (which
+# breaks cross-building for different combinations on CI in the same container).
+cd web/ui && GO111MODULE=on GOOS= GOARCH= go generate -x -v 
+gofmt -w ./web/ui
+ 
+curl -s -L https://github.com/prometheus/promu/releases/download/v0.12.0/promu-0.12.0.darwin-amd64.tar.gz | tar -xvzf - -C /var/folders/p3/q8wty0fs6kg9v4j44zmth4nc0000gn/T/tmp.DaIr0hpn
+mkdir -p /Users/wenj91/go/bin
+cp /var/folders/p3/q8wty0fs6kg9v4j44zmth4nc0000gn/T/tmp.DaIr0hpn/promu-0.12.0.darwin-amd64/promu /Users/wenj91/go/bin/promu
+rm -r /var/folders/p3/q8wty0fs6kg9v4j44zmth4nc0000gn/T/tmp.DaIr0hpn
+ 
+echo ">> building binaries"
+GO111MODULE=on /Users/wenj91/go/bin/promu build --prefix /Users/wenj91/git/prometheus 
+ 
+echo ">> running all tests"
+GO111MODULE=on go test -race  ./...
+echo ">> running React app linting"
+cd web/ui/react-app && yarn lint:ci
+echo ">> running React app tests"
+cd web/ui/react-app && yarn test --no-watch --coverage
+make: Leaving directory `/Users/wenj91/git/prometheus'
+ 

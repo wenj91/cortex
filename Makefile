@@ -97,14 +97,9 @@ pkg/frontend/v2/frontendv2pb/frontend.pb.go: pkg/frontend/v2/frontendv2pb/fronte
 pkg/querier/queryrange/queryrange.pb.go: pkg/querier/queryrange/queryrange.proto
 pkg/querier/stats/stats.pb.go: pkg/querier/stats/stats.proto
 pkg/distributor/ha_tracker.pb.go: pkg/distributor/ha_tracker.proto
-pkg/ruler/rulespb/rules.pb.go: pkg/ruler/rulespb/rules.proto
-pkg/ruler/ruler.pb.go: pkg/ruler/ruler.proto
 pkg/ring/kv/memberlist/kv.pb.go: pkg/ring/kv/memberlist/kv.proto
 pkg/scheduler/schedulerpb/scheduler.pb.go: pkg/scheduler/schedulerpb/scheduler.proto
 pkg/storegateway/storegatewaypb/gateway.pb.go: pkg/storegateway/storegatewaypb/gateway.proto
-pkg/alertmanager/alertmanagerpb/alertmanager.pb.go: pkg/alertmanager/alertmanagerpb/alertmanager.proto
-pkg/alertmanager/alertspb/alerts.pb.go: pkg/alertmanager/alertspb/alerts.proto
-
 all: $(UPTODATE_FILES)
 test: protos
 mod-check: protos
@@ -191,8 +186,6 @@ lint:
 		./pkg/querier/...
 	faillint -paths "github.com/cortexproject/cortex/pkg/querier/..." ./pkg/scheduler/...
 	faillint -paths "github.com/cortexproject/cortex/pkg/storage/tsdb/..." ./pkg/storage/bucket/...
-	faillint -paths "github.com/cortexproject/cortex/pkg/..." ./pkg/alertmanager/alertspb/...
-	faillint -paths "github.com/cortexproject/cortex/pkg/..." ./pkg/ruler/rulespb/...
 
 	# Ensure the query path is supporting multiple tenants
 	faillint -paths "\
@@ -204,11 +197,9 @@ lint:
 
 	# Ensure packages that no longer use a global logger don't reintroduce it
 	faillint -paths "github.com/cortexproject/cortex/pkg/util/log.{Logger}" \
-		./pkg/alertmanager/alertstore/... \
 		./pkg/ingester/... \
 		./pkg/flusher/... \
 		./pkg/querier/... \
-		./pkg/ruler/...
 
 test:
 	go test -tags netgo -timeout 30m -race -count 1 ./...
