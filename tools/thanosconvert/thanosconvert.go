@@ -162,3 +162,26 @@ func convertMetadata(meta metadata.Meta, expectedUser string) (metadata.Meta, []
 
 	return meta, changesRequired
 }
+
+func ConvertMetadata(meta metadata.Meta, expectedUser string) (metadata.Meta, []string) {
+	var changesRequired []string
+
+	org, ok := meta.Thanos.Labels[cortex_tsdb.TenantIDExternalLabel]
+	if !ok {
+		changesRequired = append(changesRequired, "add __org_id__ label")
+	} else if org != expectedUser {
+		changesRequired = append(changesRequired, fmt.Sprintf("change __org_id__ from %s to %s", org, expectedUser))
+	}
+
+	// remove __org_id__ so that we can see if there are any other labels
+	delete(meta.Thanos.Labels, cortex_tsdb.TenantIDExternalLabel)
+	if len(meta.Thanos.Labels) > 0 {
+		changesRequired = append(changesRequired, "remove extra Thanos labels")
+	}
+
+	meta.Thanos.Labels = map[string]string{
+		cortex_tsdb.TenantIDExternalLabel: expectedUser,
+	}
+
+	return meta, changesRequired
+}

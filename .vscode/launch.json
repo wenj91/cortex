@@ -20,6 +20,23 @@
 // "--storage.tsdb.wal-compression",
 // "--storage.tsdb.retention.time=2h"
             ]
+        },
+        {
+            "name": "Convert",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/cmd/convert",
+            "cwd": "${workspaceFolder}",
+            "args": [
+                // "-config.file=./docs/configuration/single-process-config-blocks.yaml"
+// "--web.enable-lifecycle",
+// "--storage.tsdb.path=data",
+// "--storage.tsdb.max-block-duration=2h",
+// "--storage.tsdb.min-block-duration=2h",
+// "--storage.tsdb.wal-compression",
+// "--storage.tsdb.retention.time=2h"
+            ]
         }
     ]
 }
